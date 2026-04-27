@@ -15,7 +15,7 @@ namespace DfaSqlValidator.Display
     {
         public static void Render(List<TraceStep> trace, bool debugMode)
         {
-            ConsoleWriter.Cyan("  ──────────────── STEP BY STEP - DFA TRACE ────────────────");
+            ConsoleWriter.Cyan("──────────────── STEP BY STEP - DFA TRACE ────────────────");
 
             if (trace.Count == 0)
             {
@@ -97,7 +97,7 @@ namespace DfaSqlValidator.Display
         /// <summary>Debug-mode tokenization dump.</summary>
         public static void RenderTokens(List<Token> tokens)
         {
-            ConsoleWriter.Cyan("  ─────────────────── Tokenization Result ───────────────────");
+            ConsoleWriter.Cyan("──────────────── Tokenization Result ─────────────────");
             Console.Write("  ");
             foreach (var t in tokens)
             {
