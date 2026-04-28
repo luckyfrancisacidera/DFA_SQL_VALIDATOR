@@ -56,55 +56,53 @@ namespace DfaSqlValidator.Display
             ConsoleWriter.WriteLine();
         }
 
-        // ── State Definitions (Q) — minimized 27-state DFA ───────────────
+        // ── State Definitions (Q) — 27-state DFA ───────────────
 
         public static void RenderStateDefinitions()
         {
             ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-            ConsoleWriter.Cyan("  STATE DEFINITIONS  (Q)  —  minimized DFA  [27 states]");
+            ConsoleWriter.Cyan("  STATE DEFINITIONS  (Q)  — DFA  [27 states]");
             ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
 
             var defs = new[]
             {
                 // ── Start ────────────────────────────────────────────────
-                ("q0",          "Initial / start state"),
+                ("q0",         "start state"),
 
                 // ── SELECT path ──────────────────────────────────────────
-                ("q_SELECT",    "Seen: SELECT"),
-                ("q_SEL_COL",   "Seen: SELECT <column|*>"),
-                ("q_SEL_FROM",  "Seen: SELECT … FROM"),
-                ("q_SEL_TBL",   "Seen: SELECT … FROM <table>          ← pre-accept (WHERE optional)"),
+                ("q_SELECT",   "after: SELECT"),
+                ("q_SEL_COL",  "after: SELECT <col|*>"),
+                ("q_SEL_FROM", "after: SELECT <col> FROM"),
+                ("q_SEL_TBL",  "after: SELECT <col> FROM <tbl>  // accept if ;"),
 
                 // ── INSERT path ──────────────────────────────────────────
-                ("q_INSERT",    "Seen: INSERT"),
-                ("q_INS_INTO",  "Seen: INSERT INTO"),
-                ("q_INS_TBL",   "Seen: INSERT INTO <table>"),
-                ("q_INS_VAL",   "Seen: … VALUES"),
-                ("q_INS_LP",    "Seen: … VALUES ("),
-                ("q_INS_VVAL",  "Seen: … ( <value>                    ← loops back on COMMA"),
+                ("q_INSERT",   "after: INSERT"),
+                ("q_INS_INTO", "after: INSERT INTO"),
+                ("q_INS_TBL",  "after: INSERT INTO <tbl>"),
+                ("q_INS_VAL",  "after: INSERT INTO <tbl> VALUES"),
+                ("q_INS_LP",   "after: VALUES ("),
+                ("q_INS_VVAL", "after: ( <val>  // comma loops back"),
 
                 // ── DELETE path ──────────────────────────────────────────
-                ("q_DELETE",    "Seen: DELETE"),
-                ("q_DEL_FROM",  "Seen: DELETE FROM"),
-                ("q_DEL_TBL",   "Seen: DELETE FROM <table>"),
+                ("q_DELETE",   "after: DELETE"),
+                ("q_DEL_FROM", "after: DELETE FROM"),
+                ("q_DEL_TBL",  "after: DELETE FROM <tbl>"),
 
                 // ── UPDATE path ──────────────────────────────────────────
-                ("q_UPDATE",    "Seen: UPDATE"),
-                ("q_UPD_TBL",   "Seen: UPDATE <table>"),
+                ("q_UPDATE",   "after: UPDATE"),
+                ("q_UPD_TBL",  "after: UPDATE <tbl>"),
 
-                // ── Shared tail (merged by minimization) ─────────────────
-                ("q_WHERE",     "Seen: … WHERE  |  … SET              ← merged: SEL/DEL/UPD"),
-                ("q_WCOL",      "Seen: … WHERE <column>               ← merged: SEL/DEL/UPD"),
-                ("q_WEQ",       "Seen: … WHERE <column> =             ← merged: SEL/DEL/UPD"),
-                ("q_WVAL",      "Seen: … = <value>  |  … ) pre-acc.  ← merged: SEL/DEL/UPD/INS"),
+                // ── Shared tail (merged by Myhill-Nerode) ─────────────────
+                ("q_WHERE",    "after: WHERE / SET  // shared: SEL, DEL, UPD"),
+                ("q_WCOL",     "after: WHERE <col>  // shared: SEL, DEL, UPD"),
+                ("q_WEQ",      "after: WHERE <col> =  // shared: SEL, DEL, UPD"),
+                ("q_WVAL",     "after: = <val>  // shared: SEL, DEL, UPD, INS"),
 
-                // ── Terminal ─────────────────────────────────────────────
-                ("q_SEMI",      "★ ACCEPT — valid query terminated with ;"),
-                ("q_DEAD",      "✗ TRAP   — unrecognized token, non-recoverable"),
+                // ── Terminal ──────────────────────────────────────────────
+                ("q_SEMI",     "accept: query complete"),
+                ("q_DEAD",     "trap:   non-recoverable error"),
             };
 
-            ConsoleWriter.White("  Note: q_WHERE/q_WCOL/q_WEQ/q_WVAL are shared across SELECT,");
-            ConsoleWriter.White("        DELETE, and UPDATE paths (Myhill-Nerode equivalence).");
             ConsoleWriter.WriteLine();
 
             foreach (var (state, desc) in defs)
@@ -158,9 +156,9 @@ namespace DfaSqlValidator.Display
 
             const string SEMI = "q_SEMI";
             const string DEAD = "q_DEAD";
-            const string _ = null;    // undefined → ——
+            const string? _ = null;    // undefined → ——
 
-            var rows = new (string Name, string Color, string[] Cells)[]
+            var rows = new (string Name, string Color, string?[] Cells)[]
             {
                 // Name          Color     SELECT      INSERT      DELETE      UPDATE      FROM        INTO       WHERE/SET   VALUES      STAR       =           ;           (           )           ,           COLUMN       TABLE       VALUE
                 ("q0",          "cyan",   new[]{ "q_SELECT","q_INSERT","q_DELETE","q_UPDATE",_,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
@@ -174,8 +172,7 @@ namespace DfaSqlValidator.Display
                 ("q_INS_INTO",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_INS_TBL",_ }),
                 ("q_INS_TBL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          "q_INS_VAL",_,         _,          _,          _,          _,          _,          _,           _,          _ }),
                 ("q_INS_VAL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          "q_INS_LP", _,          _,          _,           _,          _ }),
-                ("q_INS_LP",    "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          "q_INS_VVAL","_",        "q_INS_VVAL" }),
-                ("q_INS_VVAL",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          "q_WVAL",   "q_INS_LP", _,           _,          _ }),
+                ("q_INS_LP",    "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          "q_INS_VVAL", _,         "q_INS_VVAL" }),                ("q_INS_VVAL",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          "q_WVAL",   "q_INS_LP", _,           _,          _ }),
                 // ── DELETE ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                 ("q_DELETE",    "cyan",   new[]{ _,        _,         _,          _,         "q_DEL_FROM",_,        _,          _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
                 ("q_DEL_FROM",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_DEL_TBL",_ }),
@@ -192,10 +189,6 @@ namespace DfaSqlValidator.Display
                 (SEMI,          "green",  new string[17]),
                 (DEAD,          "red",    new string[17]),
             };
-
-            // Fix q_INS_LP COLUMN cell (used "_" as placeholder above — correct it)
-            // row index 9 = q_INS_LP, col index 15 = COLUMN
-            rows[9].Cells[15] = "q_INS_VVAL";
 
             // ── 3. Measure column widths ──────────────────────────────────
 
@@ -221,30 +214,12 @@ namespace DfaSqlValidator.Display
                 ConsoleWriter.Yellow(r.ToString());
             }
 
-            void CellColor(string value, string rowColor)
-            {
-                string text = (value ?? "——").PadRight(colW[Array.IndexOf(inputLabels, value) < 0 ? 0 : 0]);
-                // color by destination
-                if (value == null)
-                    ConsoleWriter.Gray("——", nl: false);
-                else if (value == SEMI)
-                    ConsoleWriter.Green(value, nl: false);
-                else if (value == DEAD)
-                    ConsoleWriter.Red(value, nl: false);
-                else if (value.StartsWith("q_WHERE") || value.StartsWith("q_WCOL") ||
-                         value.StartsWith("q_WEQ") || value.StartsWith("q_WVAL"))
-                    ConsoleWriter.Magenta(value, nl: false);
-                else
-                    ConsoleWriter.Cyan(value, nl: false);
-            }
-
             // ── 5. Render ─────────────────────────────────────────────────
 
             ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-            ConsoleWriter.Cyan("  DFA TRANSITION TABLE   δ: Q × Σ → Q   [minimized, 27 states]");
+            ConsoleWriter.Cyan("  DFA TRANSITION TABLE   δ: Q × Σ → Q   [27 states]");
             ConsoleWriter.Cyan("  rows = states │ columns = input tokens │ cells = δ(q, σ)");
             ConsoleWriter.Cyan("  —— = undefined (implicit q_DEAD at runtime)");
-            ConsoleWriter.Magenta("  Magenta rows = shared tail states (merged by Myhill-Nerode)");
             ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
             ConsoleWriter.WriteLine();
 
@@ -281,7 +256,7 @@ namespace DfaSqlValidator.Display
                 for (int c = 0; c < inputLabels.Length; c++)
                 {
                     ConsoleWriter.Yellow(" │ ", nl: false);
-                    string val = cells[c];
+                    string? val = cells[c];
                     string padded = (val ?? "——").PadRight(colW[c]);
 
                     if (val == null)
