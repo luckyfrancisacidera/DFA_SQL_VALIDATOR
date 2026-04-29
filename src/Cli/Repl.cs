@@ -40,7 +40,7 @@ namespace DfaSqlValidator.Cli
                 _handler.PrintPrompt();
 
                 string raw = Console.ReadLine()!;
-                if (raw == null) break;  // EOF (Ctrl+Z / Ctrl+D)
+                if (raw == null) break;
 
                 bool keepRunning = _handler.Handle(raw);
                 if (!keepRunning) break;

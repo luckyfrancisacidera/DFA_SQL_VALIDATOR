@@ -16,8 +16,7 @@ namespace DfaSqlValidator.Automata
         // F — the accept states.  Only q_SEMI is a final/accept state.
         // A query is valid iff the machine is in an accept state after
         // consuming all tokens.
-        private static readonly HashSet<DfaState> AcceptStates =
-            new HashSet<DfaState> { DfaState.q_SEMI };
+        private static readonly HashSet<DfaState> AcceptStates = new HashSet<DfaState> { DfaState.q_SEMI };
 
         /// <summary>
         /// Run the DFA on <paramref name="tokens"/> and return the full result.

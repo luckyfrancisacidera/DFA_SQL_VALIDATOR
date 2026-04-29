@@ -4,11 +4,7 @@
 // Renders the educational/reference panels: alphabet, state
 // definitions, and the full DFA transition table.
 //
-// Uses the 27-state DFA with the
-//   q_WHERE  ← q_SEL_WHERE + q_DEL_WHERE + q_UPD_SET
-//   q_WCOL   ← q_SEL_WCOL  + q_DEL_WCOL  + q_UPD_SCOL
-//   q_WEQ    ← q_SEL_WEQ   + q_DEL_WEQ   + q_UPD_SEQ
-//   q_WVAL   ← q_SEL_WVAL  + q_DEL_WVAL  + q_UPD_SVAL + q_INS_RP
+// Data lives in DfaData.cs — this file is pure rendering logic.
 // ============================================================
 
 namespace DfaSqlValidator.Display
@@ -31,9 +27,7 @@ namespace DfaSqlValidator.Display
 
         public static void RenderAlphabet()
         {
-            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-            ConsoleWriter.Cyan("  ALPHABET (Σ)  —  Tokens recognized by the DFA");
-            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
+            SectionHeader("ALPHABET (Σ)  —  Tokens recognized by the DFA");
 
             ConsoleWriter.Yellow("  SQL Keywords :");
             ConsoleWriter.White("    SELECT  FROM  WHERE  INSERT  INTO  VALUES");
@@ -56,234 +50,120 @@ namespace DfaSqlValidator.Display
             ConsoleWriter.WriteLine();
         }
 
-        // ── State Definitions (Q) — 27-state DFA ───────────────
+        // ── State Definitions (Q) ─────────────────────────────────────────
 
         public static void RenderStateDefinitions()
         {
-            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-            ConsoleWriter.Cyan("  STATE DEFINITIONS  (Q)  — DFA  [27 states]");
-            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-
-            var defs = new[]
-            {
-                // ── Start ────────────────────────────────────────────────
-                ("q0",         "start state"),
-
-                // ── SELECT path ──────────────────────────────────────────
-                ("q_SELECT",   "after: SELECT"),
-                ("q_SEL_COL",  "after: SELECT <col|*>"),
-                ("q_SEL_FROM", "after: SELECT <col> FROM"),
-                ("q_SEL_TBL",  "after: SELECT <col> FROM <tbl>  // accept if ;"),
-
-                // ── INSERT path ──────────────────────────────────────────
-                ("q_INSERT",   "after: INSERT"),
-                ("q_INS_INTO", "after: INSERT INTO"),
-                ("q_INS_TBL",  "after: INSERT INTO <tbl>"),
-                ("q_INS_VAL",  "after: INSERT INTO <tbl> VALUES"),
-                ("q_INS_LP",   "after: VALUES ("),
-                ("q_INS_VVAL", "after: ( <val>  // comma loops back"),
-
-                // ── DELETE path ──────────────────────────────────────────
-                ("q_DELETE",   "after: DELETE"),
-                ("q_DEL_FROM", "after: DELETE FROM"),
-                ("q_DEL_TBL",  "after: DELETE FROM <tbl>"),
-
-                // ── UPDATE path ──────────────────────────────────────────
-                ("q_UPDATE",   "after: UPDATE"),
-                ("q_UPD_TBL",  "after: UPDATE <tbl>"),
-
-                // ── Shared tail (merged by Myhill-Nerode) ─────────────────
-                ("q_WHERE",    "after: WHERE / SET  // shared: SEL, DEL, UPD"),
-                ("q_WCOL",     "after: WHERE <col>  // shared: SEL, DEL, UPD"),
-                ("q_WEQ",      "after: WHERE <col> =  // shared: SEL, DEL, UPD"),
-                ("q_WVAL",     "after: = <val>  // shared: SEL, DEL, UPD, INS"),
-
-                // ── Terminal ──────────────────────────────────────────────
-                ("q_SEMI",     "accept: query complete"),
-                ("q_DEAD",     "trap:   non-recoverable error"),
-            };
-
+            SectionHeader("STATE DEFINITIONS  (Q)  — DFA");
             ConsoleWriter.WriteLine();
 
-            foreach (var (state, desc) in defs)
+            foreach (var row in DfaData.States)
             {
-                bool isMerged = state is "q_WHERE" or "q_WCOL" or "q_WEQ" or "q_WVAL";
-
-                if (state == "q_SEMI")
-                    ConsoleWriter.Green($"  {state,-14}  {desc}");
-                else if (state == "q_DEAD")
-                    ConsoleWriter.Red($"  {state,-14}  {desc}");
-                else if (isMerged)
-                {
-                    ConsoleWriter.Magenta($"  {state,-14}", nl: false);
-                    ConsoleWriter.White($"  {desc}");
-                }
-                else
-                {
-                    ConsoleWriter.Cyan($"  {state,-14}", nl: false);
-                    ConsoleWriter.White($"  {desc}");
-                }
+                var writer = WriterFor(row.Color);
+                writer($"  {row.Name,-14}", false);
+                ConsoleWriter.White($"  {row.Desc}");
             }
+
             ConsoleWriter.WriteLine();
         }
 
-        // ── Transition Table (δ) — 27-state DFA ────────────────
-        //
-        // Rows  = states in Q (ordered by path)
-        // Cols  = token types in Σ (ordered by category)
-        // Cells = δ(state, token)  — "——" when undefined (implicit q_DEAD)
+        // ── Transition Table (δ) ──────────────────────────────────────────
+
+        // ── Transition Table (δ) ──────────────────────────────────────────
 
         public static void RenderTransitionTable()
         {
-            // ── 1. Column order ───────────────────────────────────────────
-
-            // We represent each input column as a plain string label
-            // so we can include both real TokenTypes and the sentinel "—"
-            var inputLabels = new[]
-            {
-                "SELECT","INSERT","DELETE","UPDATE",
-                "FROM","INTO","WHERE/SET","VALUES",
-                "STAR","=",";"  ,
-                "(",")",",",
-                "COLUMN","TABLE","VALUE",
-            };
-
-            // ── 2. Row definitions (state name + its transition row) ──────
-            //
-            // Each row is (displayName, color, string?[] cells)
-            // where cells[i] maps to inputLabels[i].
-            // null → "——" (no transition).
-
-            const string SEMI = "q_SEMI";
-            const string DEAD = "q_DEAD";
-            const string? _ = null;    // undefined → ——
-
-            var rows = new (string Name, string Color, string?[] Cells)[]
-            {
-                // Name          Color     SELECT      INSERT      DELETE      UPDATE      FROM        INTO       WHERE/SET   VALUES      STAR       =           ;           (           )           ,           COLUMN       TABLE       VALUE
-                ("q0",          "cyan",   new[]{ "q_SELECT","q_INSERT","q_DELETE","q_UPDATE",_,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                // ── SELECT ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                ("q_SELECT",    "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          "q_SEL_COL",_,         _,          _,          _,          _,          "q_SEL_COL", _,          _ }),
-                ("q_SEL_COL",   "cyan",   new[]{ _,        _,         _,          _,         "q_SEL_FROM",_,        _,          _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                ("q_SEL_FROM",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_SEL_TBL",_ }),
-                ("q_SEL_TBL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         "q_WHERE",  _,          _,         _,          SEMI,       _,          _,          _,          _,           _,          _ }),
-                // ── INSERT ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                ("q_INSERT",    "cyan",   new[]{ _,        _,         _,          _,         _,         "q_INS_INTO",_,         _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                ("q_INS_INTO",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_INS_TBL",_ }),
-                ("q_INS_TBL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          "q_INS_VAL",_,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                ("q_INS_VAL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          "q_INS_LP", _,          _,          _,           _,          _ }),
-                ("q_INS_LP",    "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          "q_INS_VVAL", _,         "q_INS_VVAL" }),                ("q_INS_VVAL",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          "q_WVAL",   "q_INS_LP", _,           _,          _ }),
-                // ── DELETE ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                ("q_DELETE",    "cyan",   new[]{ _,        _,         _,          _,         "q_DEL_FROM",_,        _,          _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                ("q_DEL_FROM",  "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_DEL_TBL",_ }),
-                ("q_DEL_TBL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         "q_WHERE",  _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                // ── UPDATE ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                ("q_UPDATE",    "cyan",   new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          _,           "q_UPD_TBL",_ }),
-                ("q_UPD_TBL",   "cyan",   new[]{ _,        _,         _,          _,         _,         _,         "q_WHERE",  _,          _,         _,          _,          _,          _,          _,          _,           _,          _ }),
-                // ── Shared tail (merged) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                ("q_WHERE",     "magenta",new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          "q_WCOL",    _,          _ }),
-                ("q_WCOL",      "magenta",new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         "q_WEQ",    _,          _,          _,          _,          _,           _,          _ }),
-                ("q_WEQ",       "magenta",new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          _,          _,          _,          _,          "q_WVAL",    _,          "q_WVAL" }),
-                ("q_WVAL",      "magenta",new[]{ _,        _,         _,          _,         _,         _,         _,          _,          _,         _,          SEMI,       _,          _,          _,          _,           _,          _ }),
-                // ── Terminal ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-                (SEMI,          "green",  new string[17]),
-                (DEAD,          "red",    new string[17]),
-            };
-
-            // ── 3. Measure column widths ──────────────────────────────────
-
-            const int StateColW = 12;
-            int[] colW = new int[inputLabels.Length];
-            for (int c = 0; c < inputLabels.Length; c++)
-            {
-                colW[c] = Math.Max(7, inputLabels[c].Length);
-                foreach (var row in rows)
-                {
-                    string cell = row.Cells[c] ?? "——";
-                    if (cell.Length > colW[c]) colW[c] = cell.Length;
-                }
-            }
-
-            // ── 4. Border helpers ─────────────────────────────────────────
-
-            void Rule(char l, char m, char r, char f)
-            {
-                ConsoleWriter.Yellow("  " + l + new string(f, StateColW + 2), nl: false);
-                for (int c = 0; c < inputLabels.Length; c++)
-                    ConsoleWriter.Yellow(m + new string(f, colW[c] + 2), nl: false);
-                ConsoleWriter.Yellow(r.ToString());
-            }
-
-            // ── 5. Render ─────────────────────────────────────────────────
-
-            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
-            ConsoleWriter.Cyan("  DFA TRANSITION TABLE   δ: Q × Σ → Q   [27 states]");
+            SectionHeader("DFA TRANSITION TABLE   δ: Q × Σ → Q ");
             ConsoleWriter.Cyan("  rows = states │ columns = input tokens │ cells = δ(q, σ)");
             ConsoleWriter.Cyan("  —— = undefined (implicit q_DEAD at runtime)");
             ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
             ConsoleWriter.WriteLine();
 
-            Rule('┌', '┬', '┐', '─');
+            RenderSubTable(
+                subtitle: "TABLE 1 OF 2 — SQL Keywords",
+                getLabels: () => DfaData.KeywordLabels,
+                getCells: row => row.KwCells
+            );
 
-            // Header
-            ConsoleWriter.Yellow($"  │ {"State",-StateColW}", nl: false);
-            for (int c = 0; c < inputLabels.Length; c++)
-                ConsoleWriter.Yellow($" │ {inputLabels[c].PadRight(colW[c])}", nl: false);
-            ConsoleWriter.Yellow(" │");
+            ConsoleWriter.WriteLine();
 
-            Rule('├', '┼', '┤', '─');
-
-            // Data rows
-            string[] groupBoundaries = { "q0", "q_UPD_TBL", "q_WVAL", "q_SEMI" };
-
-            for (int r = 0; r < rows.Length; r++)
-            {
-                var (name, color, cells) = rows[r];
-
-                // State label
-                ConsoleWriter.Yellow("  │ ", nl: false);
-                string label = name == SEMI ? "★ " + name : name == DEAD ? "✗ " + name : name;
-                Action<string, bool> stateWriter = color switch
-                {
-                    "green" => ConsoleWriter.Green,
-                    "red" => ConsoleWriter.Red,
-                    "magenta" => ConsoleWriter.Magenta,
-                    _ => ConsoleWriter.Cyan,
-                };
-                stateWriter($"{label,-StateColW}", false);
-
-                // Cells
-                for (int c = 0; c < inputLabels.Length; c++)
-                {
-                    ConsoleWriter.Yellow(" │ ", nl: false);
-                    string? val = cells[c];
-                    string padded = (val ?? "——").PadRight(colW[c]);
-
-                    if (val == null)
-                        ConsoleWriter.Gray(padded, nl: false);
-                    else if (val == SEMI)
-                        ConsoleWriter.Green(padded, nl: false);
-                    else if (val == DEAD)
-                        ConsoleWriter.Red(padded, nl: false);
-                    else if (val is "q_WHERE" or "q_WCOL" or "q_WEQ" or "q_WVAL")
-                        ConsoleWriter.Magenta(padded, nl: false);
-                    else
-                        ConsoleWriter.Cyan(padded, nl: false);
-                }
-                ConsoleWriter.Yellow(" │");
-
-                // Group separator
-                if (Array.IndexOf(groupBoundaries, name) >= 0 && r < rows.Length - 1)
-                    Rule('├', '┼', '┤', '─');
-            }
-
-            Rule('└', '┴', '┘', '─');
+            RenderSubTable(
+                subtitle: "TABLE 2 OF 2 — Symbols & Generic Tokens",
+                getLabels: () => DfaData.SymbolLabels,
+                getCells: row => row.SymCells
+            );
 
             ConsoleWriter.WriteLine();
             ConsoleWriter.Green("  ★  Accept state  F = { q_SEMI }");
             ConsoleWriter.Yellow("     Start  state  q0");
             ConsoleWriter.Magenta("  ◆  Shared states q_WHERE / q_WCOL / q_WEQ / q_WVAL");
             ConsoleWriter.WriteLine();
+        }
+
+        private static void RenderSubTable(
+            string subtitle,
+            Func<string[]> getLabels,
+            Func<StateRow, string?[]> getCells)
+        {
+            ConsoleWriter.Yellow($"  ── {subtitle} ──");
+            ConsoleWriter.WriteLine();
+
+            var labels = getLabels();
+            var rows = DfaData.States;
+
+            const int StateColW = 12;
+            int[] colW = new int[labels.Length];
+            for (int c = 0; c < labels.Length; c++)
+            {
+                colW[c] = Math.Max(7, labels[c].Length);
+                foreach (var row in rows)
+                {
+                    int len = (getCells(row)[c] ?? "——").Length;
+                    if (len > colW[c]) colW[c] = len;
+                }
+            }
+
+            Rule('┌', '┬', '┐', '─', StateColW, colW);
+
+            // Header
+            ConsoleWriter.Yellow($"  │ {"State",-StateColW}", nl: false);
+            foreach (var (label, w) in Zip(labels, colW))
+                ConsoleWriter.Yellow($" │ {label.PadRight(w)}", nl: false);
+            ConsoleWriter.Yellow(" │");
+
+            Rule('├', '┼', '┤', '─', StateColW, colW);
+
+            // Data rows
+            for (int r = 0; r < rows.Length; r++)
+            {
+                var row = rows[r];
+                var cells = getCells(row);
+
+                ConsoleWriter.Yellow("  │ ", nl: false);
+                string stateLabel = DfaData.IsAccept(row.Name) ? "★ " + row.Name
+                                  : DfaData.IsDead(row.Name) ? "✗ " + row.Name
+                                  : row.Name;
+                WriterFor(row.Color)($"{stateLabel,-StateColW}", false);
+
+                for (int c = 0; c < labels.Length; c++)
+                {
+                    ConsoleWriter.Yellow(" │ ", nl: false);
+                    string? val = cells[c];
+                    string padded = (val ?? "q_DEAD").PadRight(colW[c]);
+
+                    if (val == null) ConsoleWriter.Red(padded, nl: false);
+                    else if (DfaData.IsAccept(val)) ConsoleWriter.Green(padded, nl: false);
+                    else if (DfaData.IsDead(val)) ConsoleWriter.Red(padded, nl: false);
+                    else if (DfaData.IsMerged(val)) ConsoleWriter.Magenta(padded, nl: false);
+                    else ConsoleWriter.Cyan(padded, nl: false);
+                }
+                ConsoleWriter.Yellow(" │");
+
+                if (Array.IndexOf(DfaData.GroupBoundaries, row.Name) >= 0 && r < rows.Length - 1)
+                    Rule('├', '┼', '┤', '─', StateColW, colW);
+            }
+
+            Rule('└', '┴', '┘', '─', StateColW, colW);
         }
 
         // ── Prompt ────────────────────────────────────────────────────────
@@ -299,6 +179,38 @@ namespace DfaSqlValidator.Display
             ConsoleWriter.Write("DFA-SQL", ConsoleColor.Cyan);
             ConsoleWriter.Write("] ", ConsoleColor.DarkGray);
             ConsoleWriter.Write("> ", ConsoleColor.White);
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────
+
+        private static void SectionHeader(string title)
+        {
+            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
+            ConsoleWriter.Cyan($"  {title}");
+            ConsoleWriter.Cyan("══════════════════════════════════════════════════════════════");
+        }
+
+        private static void Rule(char l, char m, char r, char f, int stateColW, int[] colW)
+        {
+            ConsoleWriter.Yellow("  " + l + new string(f, stateColW + 2), nl: false);
+            foreach (int w in colW)
+                ConsoleWriter.Yellow(m + new string(f, w + 2), nl: false);
+            ConsoleWriter.Yellow(r.ToString());
+        }
+
+        // Maps color name 
+        private static Action<string, bool> WriterFor(string color) => color switch
+        {
+            "green" => ConsoleWriter.Green,
+            "red" => ConsoleWriter.Red,
+            "magenta" => ConsoleWriter.Magenta,
+            _ => ConsoleWriter.Cyan,
+        };
+
+        // Pairs two same-length sequences without LINQ overhead.
+        private static IEnumerable<(T1, T2)> Zip<T1, T2>(T1[] a, T2[] b)
+        {
+            for (int i = 0; i < a.Length; i++) yield return (a[i], b[i]);
         }
     }
 }

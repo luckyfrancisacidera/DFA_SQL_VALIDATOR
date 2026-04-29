@@ -1,29 +1,7 @@
 ﻿// ============================================================
 // Lexer/Tokenizer.cs
 // ============================================================
-// The Tokenizer is the lexical analysis stage — equivalent to
-// the "scanner" in a traditional compiler pipeline.
-//
-// Responsibility (single):
-//   Convert a raw SQL string → List<Token>
-//
-// Algorithm:
-//   1. Pre-process: pad single-char symbols with spaces so
-//      splitting on whitespace naturally isolates them.
-//   2. Split into raw parts.
-//   3. Classify each part:
-//      a. Known symbol → fixed TokenType (STAR, EQUALS, etc.)
-//      b. Reserved keyword → keyword TokenType (SELECT, FROM, …)
-//      c. Numeric literal → VALUE
-//      d. Quoted string  → VALUE
-//      e. Bare identifier → TABLE | COLUMN | VALUE
-//         decided by a lightweight "context" cursor that tracks
-//         what kind of identifier the grammar expects next.
-//      f. Anything else  → UNKNOWN (DFA will reject)
-//
-// The context cursor is the only "intelligence" here; the
-// Tokenizer is intentionally dumb about SQL semantics — all
-// structural validation belongs to the DFA engine.
+// Convert a raw SQL string → List<Token>
 // ============================================================
 
 using System.Text;
@@ -63,16 +41,14 @@ namespace DfaSqlValidator.Lexer
             { ',', TokenType.COMMA     },
         };
 
-        // ── Context labels (internal, not exposed) ────────────────────────
+        // ── Context labels ────────────────────────
         private const string CTX_NONE = "NONE";
         private const string CTX_COLUMN = "COLUMN";
         private const string CTX_TABLE = "TABLE";
         private const string CTX_VALUE = "VALUE";
 
-        /// <summary>
         /// Tokenize <paramref name="input"/> into an ordered list of tokens.
-        /// Never throws; unknown content produces <see cref="TokenType.UNKNOWN"/> tokens.
-        /// </summary>
+        /// Never throws
         public static List<Token> Tokenize(string input)
         {
             var tokens = new List<Token>();
