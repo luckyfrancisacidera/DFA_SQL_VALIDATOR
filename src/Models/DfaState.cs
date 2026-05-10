@@ -66,7 +66,7 @@ namespace DfaSqlValidator.Models
         q_UPD_SVAL,     // seen: … SET <column> = <value>   ← pre-accept
 
         // ── Terminal ─────────────────────────────────────────
-        q_SEMI,         // ★ ACCEPT — valid query, terminated with ;
-        q_DEAD          // ✗ TRAP   — invalid token, non-recoverable
+        q_SEMI,         //ACCEPT — valid query, terminated with ;
+        q_DEAD          //TRAP   — invalid token, non-recoverable
     }
 }

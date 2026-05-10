@@ -103,6 +103,7 @@ namespace DfaSqlValidator.Display
             {
                 ConsoleWriter.Magenta(t.Type.ToString(), nl: false);
                 ConsoleWriter.Gray($"('{t.Lexeme}') ", nl: false);
+                Console.WriteLine();
             }
             Console.ResetColor();
             Console.WriteLine();

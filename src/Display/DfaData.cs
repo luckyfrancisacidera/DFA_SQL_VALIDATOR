@@ -31,7 +31,7 @@ namespace DfaSqlValidator.Display
 
         // ── Transition rows ──────────────────────────────────────────────
 
-        private const string SEMI = "q_SEMI";
+        private const string SEMI = "q_SEMI*";
         private const string DEAD = "q_DEAD";
         private const string? _ = null;
 
